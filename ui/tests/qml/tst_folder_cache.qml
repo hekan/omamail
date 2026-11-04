@@ -13,11 +13,12 @@ Item {
   id: root
   width: 400
   height: 500
+  SystemPalette { id: palette }
   Component {
     id: sidebarFactory
     Components.MailboxSidebar {
       width: 400; height: 500
-      textColor: "black"; accentColor: "blue"; dimColor: "gray"
+      textColor: palette.text; accentColor: palette.highlight; dimColor: palette.mid
       panelFontFamily: "monospace"
       service: null
     }
