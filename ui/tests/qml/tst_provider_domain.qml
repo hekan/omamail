@@ -2,6 +2,7 @@ import QtQuick
 import QtTest
 import "../../account" as Account
 import "../../providers/Registry.js" as Provider
+import "../../account/Model.js" as Model
 
 Item {
   Component {
@@ -73,6 +74,49 @@ Item {
       compare(account.effectiveQuery, "in:trash")
       compare(account.searchQuery, "")
     }
+    function test_server_folder_roles_preserve_draft_editing_and_clear_on_leaving() {
+      var backend = createTemporaryObject(backendFactory, parent)
+      var account = createTemporaryObject(accountFactory, parent, { backend: backend })
+      tryVerify(function() { return account.api !== null })
+      account.api.folders = [
+        {name:"Poczta/Szkice", flags:["\\Drafts"], delimiter:"/"},
+        {name:"Projects", flags:[], delimiter:"/"},
+        {name:"Drafts", flags:[], delimiter:"/"},
+        {name:"Poczta/Archiwum", flags:["\\Archive"], delimiter:"/"},
+        {name:"Everything", flags:["\\All"], delimiter:"/"}
+      ]
+      account.api.special = {"\\drafts":"Drafts"}
+      account.selectLabel("Poczta/Szkice", "Poczta/Szkice")
+      backend.requests[0].done({value:'folder:"Poczta/Szkice"'}, null)
+      compare(account.mailboxKey, "drafts", "The server role enables continuing an existing draft")
+      compare(account.effectiveQuery, 'folder:"Poczta/Szkice"')
+      account.selectLabel("Projects", "Projects")
+      backend.requests[1].done({value:'folder:"Projects"'}, null)
+      compare(account.mailboxKey, "inbox", "An ordinary folder must leave draft-editing mode")
+      compare(account.effectiveQuery, 'folder:"Projects"')
+      account.selectLabel("Drafts", "Drafts")
+      backend.requests[2].done({value:'folder:"Drafts"'}, null)
+      compare(account.mailboxKey, "inbox", "An English name or inferred mapping is not an advertised role")
+      account.selectLabel("Poczta/Szkice", "Poczta/Szkice")
+      account.selectMailbox("starred")
+      backend.requests[3].done({value:'folder:"Poczta/Szkice"'}, null)
+      compare(account.mailboxKey, "starred", "A stale folder reply must not restore the draft role")
+      account.selectLabel("Poczta/Archiwum", "Poczta/Archiwum")
+      backend.requests[4].done({value:'folder:"Poczta/Archiwum"'}, null)
+      compare(account.effectiveQuery, 'folder:"Poczta/Archiwum"')
+      compare(account.rawQuery, "", "An advertised role is a mailbox view, not a search")
+      compare(Model.keyActionFor("archive", [{id:"1", inInbox:false}], account), "unarchive")
+      account.selectLabel("Everything", "Everything")
+      backend.requests[5].done({value:'folder:"Everything"'}, null)
+      compare(account.effectiveQuery, 'folder:"Everything"')
+      account.selectMailbox("all")
+      compare(account.rawLabelId, "")
+      compare(account.effectiveQuery, "search:ALL", "The virtual view must leave its same-role physical folder")
+      account.selectMailbox("inbox")
+      account.selectMailbox("all")
+      compare(account.effectiveQuery, "search:ALL", "Returning must not reuse a physical folder's cached query")
+    }
+
     function test_label_query_is_native_and_late_navigation_reply_is_ignored() {
       var backend = createTemporaryObject(backendFactory, parent)
       var account = createTemporaryObject(accountFactory, parent, { backend: backend })

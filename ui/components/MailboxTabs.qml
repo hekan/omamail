@@ -18,6 +18,9 @@ Flickable {
   // Provider-specific, and handed down rather than looked up: this row must
   // never offer a mailbox the account on screen does not have.
   property var allMailboxes: []
+  property var folderLabels: []
+  property string currentFolderId: ""
+  signal folderSelected(string id, string name)
   property int unread: 0
   property int cursorIndex: -1
 
@@ -26,7 +29,7 @@ Flickable {
 
   // Keep every destination reachable, including folders excluded from search.
   // Narrow windows scroll the row instead of hiding Archive, Junk and Trash.
-  readonly property var mailboxes: Array.isArray(root.allMailboxes) ? root.allMailboxes : []
+  readonly property var mailboxes: Model.mailboxTabs(root.allMailboxes, root.folderLabels)
 
   width: parent ? parent.width : 0
   implicitHeight: track.height + (interactive ? scrollBar.height : 0)
@@ -49,9 +52,16 @@ Flickable {
     }
   }
 
+  function isCurrent(mailbox) {
+    if (currentFolderId !== "") return mailbox.folderId === currentFolderId
+    if (current === "inbox" && mailbox.folderId
+        && String(mailbox.folderId).toLowerCase() === "inbox") return true
+    return mailbox.key === current
+  }
+
   function revealCurrent() {
     for (var i = 0; i < mailboxes.length; i++) {
-      if (mailboxes[i].key !== current) continue
+      if (!isCurrent(mailboxes[i])) continue
       var chip = segments.itemAt(i)
       if (!chip) return
       var left = track.x + chip.x
@@ -62,7 +72,9 @@ Flickable {
     }
   }
   onCurrentChanged: Qt.callLater(revealCurrent)
+  onCurrentFolderIdChanged: Qt.callLater(revealCurrent)
   onWidthChanged: Qt.callLater(revealCurrent)
+  onContentWidthChanged: Qt.callLater(revealCurrent)
 
   // One segmented control rather than loose chips. Separate chips left the
   // selected one's fill floating at a different left edge from the logo above
@@ -110,15 +122,31 @@ Flickable {
             anchors.fill: parent
             // Only the unread mailbox carries a count: repeating it on Inbox
             // says the same number twice, and the bar already says it once.
-            text: segment.modelData.key === "unread" && root.unread > 0
-              ? segment.modelData.label + " " + root.unread
-              : segment.modelData.label
+            // Folder names are server data. Own the plain-text label here
+            // rather than relying on each host's Button text renderer.
+            text: ""
+            implicitWidth: Math.max(40, chipLabel.implicitWidth + horizontalPadding * 2)
+            Text {
+              id: chipLabel
+              anchors.centerIn: parent
+              textFormat: Text.PlainText
+              text: segment.modelData.key === "unread" && root.unread > 0
+                ? segment.modelData.label + " " + root.unread
+                : segment.modelData.label
+              color: root.textColor
+              font.family: root.panelFontFamily
+              font.pixelSize: chip.fontSize
+            }
             foreground: root.textColor
             bordered: false
-            selected: root.current === segment.modelData.key
+            selected: root.isCurrent(segment.modelData)
             hasCursor: root.cursorIndex === segment.index
             fontSize: Style.font.bodySmall
-            onClicked: root.selected(segment.modelData.key)
+            onClicked: {
+              if (segment.modelData.folderId !== undefined)
+                root.folderSelected(segment.modelData.folderId, segment.modelData.folderName)
+              else root.selected(segment.modelData.key)
+            }
             onHovered: function(isHovered) { root.chipHovered(segment.index, isHovered) }
           }
         }

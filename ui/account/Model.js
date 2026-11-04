@@ -18,6 +18,22 @@
 
 // ------------------------------------------------------------ setup state
 
+// Compact windows have no folder tree. When physical mailbox rows have
+// been replaced by server folders, keep those folders reachable as tabs.
+function mailboxTabs(mailboxes, labels) {
+  var boxes = Array.isArray(mailboxes) ? mailboxes : []
+  for (var i = 0; i < boxes.length; i++) if (boxes[i].key === "inbox") return boxes
+  var folders = Array.isArray(labels) ? labels : []
+  var out = boxes.slice()
+  for (var j = 0; j < folders.length; j++) {
+    var folder = folders[j]
+    if (!folder || folder.system || !folder.id) continue
+    out.push({key:"folder:" + folder.id, label:String(folder.name || folder.rawName || ""),
+      folderId:String(folder.id), folderName:String(folder.rawName || folder.name || "")})
+  }
+  return out
+}
+
 function mailboxAfterAccountSwitch(currentKey, targetMailboxes) {
   var key = String(currentKey || "")
   var mailboxes = Array.isArray(targetMailboxes) ? targetMailboxes : []

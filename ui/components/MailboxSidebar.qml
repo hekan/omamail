@@ -113,7 +113,7 @@ Item {
         visible: root.userLabels.length > 0 && !root.collapsed
         leftPadding: Style.space(8)
         bottomPadding: Style.space(3)
-        text: "LABELS"
+        text: root.service && !root.service.hasLabels ? "FOLDERS" : "LABELS"
         foreground: root.textColor
         fontFamily: root.panelFontFamily
       }
@@ -144,8 +144,14 @@ Item {
           count: modelData.unread
           selected: root.menuLabelPath === modelData.path
             || (modelData.selectable && !root.calendarSelected && !!root.service
-              && root.service.rawQuery !== ""
+              && root.service.rawLabelId !== ""
               && root.service.rawLabelId === modelData.id)
+            || (modelData.selectable && !root.calendarSelected && !!root.service
+              && !root.service.hasLabels
+              && root.service.mailboxKey === "inbox"
+              && root.service.searchQuery === "" && root.service.rawQuery === ""
+              && root.service.rawLabelId === ""
+              && String(modelData.id).toLowerCase() === "inbox")
           onActivated: {
             if (modelData.selectable) root.labelSelected(modelData.id, modelData.rawName)
             else root.folderToggled(modelData.path)

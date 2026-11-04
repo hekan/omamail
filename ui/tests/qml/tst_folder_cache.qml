@@ -3,10 +3,25 @@ import QtQuick
 import QtTest
 import "transports.js" as Transports
 import "../../message/Message.js" as Message
+import "../../account/Model.js" as Model
+import "../../providers/Registry.js" as Registry
 import "../../providers" as Providers
 import "../../account" as Account
+import "../../components" as Components
 
 Item {
+  id: root
+  width: 400
+  height: 500
+  Component {
+    id: sidebarFactory
+    Components.MailboxSidebar {
+      width: 400; height: 500
+      textColor: "black"; accentColor: "blue"; dimColor: "gray"
+      panelFontFamily: "monospace"
+      service: null
+    }
+  }
   QtObject {
     id: auth
     property string accountId: "imap:synthetic@example.com"
@@ -66,6 +81,66 @@ Item {
   TestCase {
     name: "RealImapCache"
     when: windowShown
+    function test_server_folders_remain_visible_without_synthetic_destinations() {
+      client.backend = null
+      client.foldersLoaded = false
+      Transports.install(client)
+      var delivered = null
+      client.getLabels(function(labels, error) {
+        compare(error, "")
+        delivered = labels
+      })
+      var requests = Transports.transports(client)
+      compare(requests.length, 1)
+      compare(requests[0].method, "imap.folders")
+      var labels = [
+        {id:"INBOX", name:"INBOX", rawName:"INBOX", delimiter:"/", system:true},
+        {id:"Poczta/Wyslane", name:"Poczta/Wysłane", rawName:"Poczta/Wyslane", delimiter:"/", system:true},
+        {id:"Projects.2026", name:"Projects.2026", rawName:"Projects.2026", delimiter:"", system:false}
+      ]
+      Transports.reply(requests[0], {folders:[], special:{"\\sent":"Poczta/Wyslane"},
+        capabilities:[], labels:labels}, "")
+      verify(delivered !== null, "Folder callback must run")
+      var rows = Model.labelTree(delivered, [])
+      var ids = rows.filter(function(row) { return row.selectable }).map(function(row) { return row.id })
+      compare(JSON.stringify(ids), JSON.stringify(["INBOX", "Poczta/Wyslane", "Projects.2026"]))
+      compare(rows[2].name, "Wysłane")
+      compare(rows[2].depth, 1)
+      compare(rows[2].rawName, "Poczta/Wyslane")
+      compare(labels[0].system, true, "Do not mutate backend data")
+      var views = Registry.mailboxes("imap", client.absentMailboxes, 10)
+      compare(JSON.stringify(views.map(function(row) { return row.key })),
+        JSON.stringify(["unread", "starred", "all"]))
+      var sidebar = createTemporaryObject(sidebarFactory, root)
+      sidebar.service = {
+        labels:delivered, mailboxes:views, collapsedFolders:[], monitoredLabelIds:[],
+        providerId:"imap", hasLabels:false, mailboxKey:"inbox", searchQuery:"", rawQuery:"", rawLabelId:""
+      }
+      verify(sidebar !== null)
+      wait(0)
+      function textItem(item, text) {
+        if (item.text === text && item.textFormat !== undefined) return item
+        var children = item.children || []
+        for (var i = 0; i < children.length; i++) {
+          var found = textItem(children[i], text)
+          if (found) return found
+        }
+        return null
+      }
+      verify(textItem(sidebar, "FOLDERS") !== null)
+      var inbox = textItem(sidebar, "INBOX")
+      verify(inbox !== null)
+      compare(inbox.parent.selected, true, "The initial inbox highlights the server folder")
+      var sent = textItem(sidebar, "Wysłane")
+      verify(sent !== null)
+      var selectedName = "", selectedId = ""
+      sidebar.labelSelected.connect(function(id, name) { selectedId = id; selectedName = name })
+      mouseClick(sent, sent.width / 2, sent.height / 2)
+      compare(selectedId, "Poczta/Wyslane")
+      compare(selectedName, "Poczta/Wyslane", "Open the raw server name, not a synthetic role")
+      compare(Transports.transports(client).length, 1, "Building the tree must not read mail")
+    }
+
     function test_queued_listing_is_fresh() {
       var before = mailbox.labels;
       var second;

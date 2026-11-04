@@ -1800,6 +1800,12 @@ Item {
           // The account's own mailboxes, not a fixed set: this row and the
           // sidebar it replaces on a narrow window must offer the same ones.
           allMailboxes: root.service ? root.service.mailboxes : []
+          folderLabels: root.service ? root.service.labels : []
+          currentFolderId: root.service ? root.service.rawLabelId : ""
+          onFolderSelected: function(id, name) {
+            root.service.selectLabel(name, id)
+            root.backToList()
+          }
           current: root.service ? root.service.mailboxKey : "inbox"
           unread: root.service ? root.service.inboxUnread : 0
           onSelected: function(key) { root.goMailbox(key) }

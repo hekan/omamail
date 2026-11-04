@@ -111,7 +111,7 @@ Item {
   // What *this account* takes back from what its provider declares, and the
   // rail rows it has no mailbox for: two servers of one kind can differ, so the
   // provider list is a ceiling the client withdraws from. A client exposing
-  // neither (Gmail, HEY, IMAP) leaves every answer at the ceiling.
+  // neither (Gmail, HEY) leaves every answer at the ceiling.
   //
   // Both are null between clients and until the mailboxes are read, so the
   // ceiling is the default: a press against a mailbox since gone lands on the
@@ -2480,12 +2480,14 @@ Item {
   function selectMailbox(key) {
     providerLabelSerial++
     providerQuerySerial++
-    if (mailboxKey === key && searchQuery === "" && rawQuery === "") return
+    if (mailboxKey === key && searchQuery === "" && rawQuery === "" && rawLabelId === "") return
     mailboxKey = String(key || "inbox")
     searchQuery = ""
     searchRaw = ""
     rawQuery = ""
     rawLabelId = ""
+    resolvedProviderInput = ""
+    resolvedProviderQuery = ""
     clearSelection()
     messages = []
     previewMessages = []
@@ -2541,11 +2543,20 @@ Item {
       if (serial !== root.providerLabelSerial || boundAccount !== root.accountId || boundProvider !== root.providerId || error) return
       var query = String((result || {}).value || "")
       var id = String(labelId || "")
-      if (query === "" || (query === root.rawQuery && id === root.rawLabelId)) return
+      if (query === "" || (query === root.effectiveQuery && id === root.rawLabelId)) return
+      var role = ""
+      if (root.api && typeof root.api.mailboxKeyForLabel === "function") {
+        role = root.api.mailboxKeyForLabel(id)
+        root.mailboxKey = role || "inbox"
+      }
       root.searchQuery = ""
       root.searchRaw = ""
-      root.rawQuery = query
+      root.rawQuery = role === "" ? query : ""
       root.rawLabelId = id
+      if (role !== "") {
+        root.resolvedProviderQuery = query
+        root.resolvedProviderInput = root.providerQueryInput
+      }
       root.clearSelection()
       root.messages = []
       root.loadedDepth = 0

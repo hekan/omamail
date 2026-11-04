@@ -1,6 +1,7 @@
 import QtQuick
 
 import "../account/Aliases.js" as Aliases
+import "../backend/Plain.js" as Plain
 
 Item {
   id: root
@@ -17,6 +18,10 @@ Item {
   readonly property bool busy: inFlight > 0
 
   readonly property bool oauthTransport: !!auth && String(auth.authMode || "") === "oauth2"
+
+  // Physical folders are shown once, in the server's folder tree. Only
+  // virtual views belong in the provider rail; never request a guessed role.
+  readonly property var absentMailboxes: ["inbox", "drafts", "sent", "archive", "spam", "trash"]
 
   property var nativeLabels: []
   property int nativeRequestGeneration: 0
@@ -209,8 +214,32 @@ Item {
 
   function getLabels(callback) {
     ensureFolders(function(error) {
-      if (typeof callback === "function") callback(error ? [] : root.nativeLabels, error)
+      if (typeof callback !== "function") return
+      // The backend marks role folders as system entries for the old fixed
+      // rail. Keep every advertised folder in the tree, including those roles.
+      var labels = error ? [] : Plain.plain(root.nativeLabels)
+      for (var i = 0; i < labels.length; i++) labels[i].system = false
+      callback(labels, error)
     })
+  }
+
+  // Folder names choose the destination; advertised roles preserve behavior
+  // such as resuming a draft when its folder is opened from the tree.
+  function mailboxKeyForLabel(labelId) {
+    var id = String(labelId || "")
+    if (id.toLowerCase() === "inbox") return "inbox"
+    var list = Plain.plain(root.folders)
+    var roles = {"\\drafts":"drafts", "\\sent":"sent", "\\trash":"trash",
+      "\\junk":"spam", "\\archive":"archive", "\\all":"all"}
+    for (var i = 0; i < list.length; i++) {
+      if (String(list[i].name) !== id) continue
+      var flags = list[i].flags || []
+      for (var j = 0; j < flags.length; j++) {
+        var flag = String(flags[j]).toLowerCase()
+        if (Object.prototype.hasOwnProperty.call(roles, flag)) return roles[flag]
+      }
+    }
+    return ""
   }
 
   function getLabelCounts(labelId, callback) {
